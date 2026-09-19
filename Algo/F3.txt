@@ -1,0 +1,114 @@
+%%{ init: { 
+  "flowchart": { "nodeSpacing": 55, "rankSpacing": 70, "curve": "linear" },
+  "theme": "base",
+  "themeVariables": { 
+    "fontSize": "14px",
+    "fontFamily": "Times New Roman",
+    "primaryTextColor": "#000000",
+    "lineColor": "#000000"
+  } 
+} }%%
+
+flowchart TD
+
+%% ===================== STYLE =====================
+classDef data    fill:#e3f2fd,stroke:#1e88e5,color:#000000,font-weight:bold,font-size:16px
+classDef local   fill:#e8eaf6,stroke:#5c6bc0,color:#000000,font-weight:bold
+classDef global  fill:#e8f5e9,stroke:#43a047,color:#000000,font-weight:bold
+classDef fusion  fill:#fff3e0,stroke:#fb8c00,color:#000000,font-weight:bold,stroke-width:2px
+classDef ssmT    fill:#f3e5f5,stroke:#8e24aa,color:#000000,font-weight:bold,stroke-width:2px
+classDef ssmS    fill:#e0f2f1,stroke:#00897b,color:#000000,font-weight:bold
+classDef sfd     fill:#fffde7,stroke:#fbc02d,color:#000000,font-weight:bold
+classDef loss    fill:#ffebee,stroke:#e53935,color:#000000,font-weight:bold
+classDef tfreeze fill:#ffcdd2,stroke:#e53935,color:#000000,font-weight:bold
+classDef tstud   fill:#ccffe0,stroke:#00c853,color:#000000,font-weight:bold
+classDef out     fill:#e0f7fa,stroke:#00838f,color:#000000,font-weight:bold,font-size:16px
+
+%% ===================== INPUT =====================
+IN["<b>PREPROCESSED INPUT</b><br>
+x ∈ R^{B×3×224×224}<br>
+Cervical Cytology (5-class)"]:::data
+
+%% ===================== TEACHER =====================
+subgraph TEACHER["<b>TEACHER MODEL (FROZEN)</b>"]
+direction LR
+
+TC1["CNN Feature Extraction<br>Multi-scale Conv"]:::local
+TC2["SPPF Pooling<br>Multi-scale Features"]:::local
+TG["Global Backbone<br>DenseNet / ViT"]:::global
+TGCAF["Gated Cross Attention Fusion"]:::fusion
+TBIO["Bio-SSSM Tower<br>6 Layers"]:::ssmT
+TFSSM["Teacher Feature F_T"]:::tfreeze
+TLOGIT["Soft Logits (T=4)"]:::tfreeze
+
+TC1 --> TC2
+TC2 --> TGCAF
+TG --> TGCAF
+TGCAF --> TBIO --> TFSSM --> TLOGIT
+
+end
+
+%% ===================== STUDENT =====================
+subgraph STUDENT["<b>STUDENT MODEL (TRAINABLE)</b>"]
+direction LR
+
+SC1["Dual DenseNet Backbone"]:::ssmS
+SFSSM["Student Feature F_S"]:::ssmS
+SLOGIT["Soft Logits (T=4)"]:::ssmS
+SOUT["Classifier (5-class)"]:::tstud
+
+SC1 --> SFSSM --> SLOGIT --> SOUT
+
+end
+
+%% ===================== DISTILLATION =====================
+subgraph DISTILL["<b>SPATIAL FEATURE DISTILLATION (SFD)</b>"]
+direction LR
+
+SMSE["Spatial MSE<br>Feature Alignment"]:::sfd
+SKL["KL Divergence<br>Soft Targets"]:::sfd
+LSFD["L_SFD<br>Combined Loss"]:::sfd
+
+SMSE --> LSFD
+SKL --> LSFD
+
+end
+
+%% ===================== LOSS =====================
+subgraph LOSSBLOCK["<b>TOTAL LOSS FUNCTION</b>"]
+direction LR
+
+LCE["Cross Entropy"]:::loss
+LNFC["Feature Consistency"]:::loss
+LFOC["Focal Loss"]:::loss
+LTOT["Total Loss"]:::loss
+
+LCE --> LTOT
+LNFC --> LTOT
+LFOC --> LTOT
+
+end
+
+%% ===================== OUTPUT =====================
+OUT["<b>FINAL CLASSIFICATION</b><br>
+Accuracy: 97.78%<br>
+AUC: 0.9990"]:::out
+
+%% ===================== FLOW =====================
+IN --> TEACHER
+IN --> STUDENT
+
+%% distillation links
+TFSSM --> SMSE
+SFSSM --> SMSE
+TLOGIT --> SKL
+SLOGIT --> SKL
+
+DISTILL --> LOSSBLOCK
+SOUT --> LOSSBLOCK
+
+%% training flow
+LOSSBLOCK -.->|"Backprop (Student Only)"| STUDENT
+TEACHER -.->|"Frozen Weights"| STUDENT
+
+SOUT --> OUT

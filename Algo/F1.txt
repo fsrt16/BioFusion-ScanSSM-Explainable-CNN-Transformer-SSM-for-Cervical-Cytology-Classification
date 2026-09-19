@@ -1,0 +1,149 @@
+%%{ init: { 
+  "flowchart": { "nodeSpacing": 55, "rankSpacing": 70, "curve": "basis" },
+  "themeVariables": { 
+    "fontSize": "16px",
+    "fontFamily": "Times New Roman"
+  } 
+} }%%
+
+flowchart LR
+
+    %% ===================== STYLE DEFINITIONS =====================
+    classDef data  fill:#0d1b2a,stroke:#29b6f6,color:#e1f5fe,font-weight:bold,font-size:18px,rx:12
+    classDef prep  fill:#1a237e,stroke:#7986cb,color:#e8eaf6,font-weight:bold,font-size:16px
+    classDef split fill:#1b5e20,stroke:#81c784,color:#e8f5e9,font-weight:bold,font-size:16px
+    classDef aug   fill:#33691e,stroke:#aed581,color:#f9fbe7,font-size:15px
+    classDef model fill:#4a148c,stroke:#e040fb,color:#ede7f6,font-weight:bold,stroke-width:4px,font-size:18px
+    classDef opt   fill:#e65100,stroke:#ffcc02,color:#fff8e1,font-weight:bold,font-size:15px
+    classDef eval  fill:#b71c1c,stroke:#ef9a9a,color:#ffebee,font-weight:bold,font-size:15px
+    classDef xai   fill:#263238,stroke:#80cbc4,color:#e0f2f1,font-size:15px
+
+    %% ===================== INPUT =====================
+    IN(["🔬 <b>SIPaKMeD Dataset</b><br><br>
+        4,049 Pap Smear Images<br>
+        5 Diagnostic Classes<br>
+        Resolution: 224×224 px"]):::data
+
+    %% ===================== PREPROCESSING =====================
+    D1["① <b>DPAGC</b><br><br>
+        γ = 0.7·(1−Ī)^0.7<br>
+        Patch-Adaptive Gamma Correction<br>
+        Contrast Enhancement without Over-Saturation"]:::prep
+
+    D2["② <b>Macenko Stain Normalization</b><br><br>
+        OD = −log(I/I₀)<br>
+        H&E Disentanglement<br>
+        Lab-Invariant Colour Space"]:::prep
+
+    D3["③ <b>Cytoplasm Masking</b><br><br>
+        Polygon ROI Annotation<br>
+        Nucleus-Centric Feature Extraction<br>
+        Background Suppression"]:::prep
+
+    D4["④ <b>PEG Encoding</b><br><br>
+        DWConv 3×3 on ℝ^{B×D×H×W}<br>
+        Translation-Invariant Representation<br>
+        Resize 256 → CenterCrop 224"]:::prep
+
+    %% ===================== SPLIT =====================
+    TR["<b>Training Split (90%)</b><br><br>
+        ~3,644 Images<br>
+        Stratified Shuffle Split<br>
+        Seed = 42"]:::split
+
+    TE["<b>Test Split (10%)</b><br><br>
+        ~405 Images<br>
+        Stratified Shuffle Split<br>
+        Seed = 42"]:::split
+
+    %% ===================== AUGMENTATION =====================
+    AU["<b>Data Augmentation</b><br><br>
+        Horizontal Flip<br>
+        Rotation ±10°<br>
+        Tensor Conversion + Normalization (μ,σ)<br>
+        Cytoplasm Mask Applied"]:::aug
+
+    %% ===================== MODEL =====================
+    MD(["⬡ <b>BioFusion-ScanSSM</b><br><br>
+        Tri-Hybrid Architecture<br>
+        CNN + Transformer + SSM<br><br>
+        Multi-Dataset Generalization:<br>
+        SIPaKMeD · Herlev · Malaria<br>
+        Brain Tumor · Br35H"]):::model
+
+    %% ===================== OPTIMIZATION =====================
+    O1["<b>Optimizer: AdamW</b><br><br>
+        lr = 1×10⁻⁴<br>
+        weight decay = 0.01<br>
+        Batch Size = 16<br>
+        Mixed Precision (fp16)<br>
+        GPU: RTX 5060 Ti (16GB)"]:::opt
+
+    O2["<b>Learning Strategy</b><br><br>
+        Cosine Annealing<br>
+        26 Epochs<br>
+        Stochastic Depth: pₗ = l/L<br>
+        LayerScale γ = 10⁻⁵"]:::opt
+
+    O3["<b>Multi-Component Loss</b><br><br>
+        ℒ = ℒ_CE + 0.5·ℒ_NFC + ℒ_Focal + ℒ_SFD<br><br>
+        ℒ_NFC = ℒ_coh + ℒ_sep (margin = 1)<br>
+        ℒ_SFD = KL(T=4)·T² + MSE·T⁴"]:::opt
+
+    %% ===================== EVALUATION =====================
+    E1["<b>Standard Inference</b><br><br>
+        Single Forward Pass<br>
+        Accuracy: 97.53%<br>
+        F1-score: 0.9755<br>
+        AUC: 0.9982<br>
+        Cohen’s κ: 0.9691"]:::eval
+
+    E2["<b>4-View TTA Inference</b><br><br>
+        Clean + HFlip + Rot(+10°) + Rot(−10°)<br>
+        Averaged Softmax → Argmax<br>
+        Accuracy: 97.78%<br>
+        F1-score: 0.9779"]:::eval
+
+    E3["<b>Global Performance</b><br><br>
+        AUC: 0.9990<br>
+        Cohen’s κ: 0.9722<br>
+        Sensitivity: 92.8–100%<br>
+        Specificity: 98.8–100%"]:::eval
+
+    %% ===================== XAI =====================
+    X1["<b>Grad-CAM</b><br><br>
+        Nuclear Activation Regions<br>
+        Hyperchromasia Focus<br>
+        Class-Specific Heatmaps"]:::xai
+
+    X2["<b>SHAP</b><br><br>
+        Feature Attribution Analysis<br>
+        Symmetric ± Contributions<br>
+        Bias Validation"]:::xai
+
+    X3["<b>LIME</b><br><br>
+        Superpixel-Based Explanation<br>
+        Green = Positive Contribution<br>
+        Red = Irrelevant Regions"]:::xai
+
+    %% ===================== FLOW =====================
+    IN --> D1 --> D2 --> D3 --> D4
+    D4 --> TR
+    D4 --> TE
+
+    TR --> AU --> MD
+    MD --> O1 --> O2 --> O3
+
+    O3 -.->|"Backpropagation<br>Checkpoint: best.pth"| MD
+
+    MD --> E1
+    MD --> E2
+    TE --> E1
+    TE --> E2
+
+    E1 --> E3
+    E2 --> E3
+
+    E3 --> X1
+    E3 --> X2
+    E3 --> X3

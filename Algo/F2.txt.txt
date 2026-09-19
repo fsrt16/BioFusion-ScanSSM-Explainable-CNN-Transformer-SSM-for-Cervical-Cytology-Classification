@@ -1,0 +1,91 @@
+%%{ init: { 
+  "flowchart": { "nodeSpacing": 55, "rankSpacing": 70, "curve": "linear" },
+  "theme": "base",
+  "themeVariables": { 
+    "fontSize": "14px",
+    "fontFamily": "Times New Roman",
+    "primaryTextColor": "#000000",
+    "lineColor": "#000000"
+  } 
+} }%%
+
+flowchart TD
+
+%% ===================== STYLE =====================
+classDef input   fill:#e3f2fd,stroke:#1e88e5,color:#000000,font-weight:bold,font-size:17px
+classDef proj    fill:#e8eaf6,stroke:#5c6bc0,color:#000000
+classDef disc    fill:#f3e5f5,stroke:#8e24aa,color:#000000,font-weight:bold
+classDef gate    fill:#fff3e0,stroke:#fb8c00,color:#000000,font-weight:bold
+classDef affine  fill:#e8f5e9,stroke:#43a047,color:#000000
+classDef scan    fill:#e0f2f1,stroke:#00897b,color:#000000,font-weight:bold
+classDef reg     fill:#eceff1,stroke:#546e7a,color:#000000
+classDef res     fill:#fbe9e7,stroke:#f4511e,color:#000000,font-style:italic
+classDef out     fill:#ffebee,stroke:#e53935,color:#000000,font-weight:bold,font-size:16px
+
+%% ===================== INPUT =====================
+XT["<b>INPUT TOKEN SEQUENCE</b><br>
+x_t ∈ R^{B×N×D}<br>
+N=196 | D=256"]:::input
+
+%% ===================== PROJECTION =====================
+subgraph ST1["<b>INPUT PROJECTION</b>"]
+direction LR
+PROJ["LayerNorm + Linear<br>D → 256<br>GELU"]:::proj
+DISC["SSM Discretization<br>
+h_t = Δ·h_{t-1} + Δ·x_t<br>
+y_t = C·h_t"]:::disc
+end
+
+%% ===================== GATING + AFFINE =====================
+subgraph ST2["<b>GATING AND AFFINE CONSTRUCTION</b>"]
+direction LR
+GATE["Biological Gate<br>
+Global Pool + Sigmoid<br>
+Token Selection"]:::gate
+AFFINE["Affine Pair<br>
+(A_t , B_t·x_t)<br>
+Associative Composition"]:::affine
+end
+
+%% ===================== PARALLEL SCAN =====================
+subgraph ST3["<b>PARALLEL ASSOCIATIVE SCAN (P-SCAN)</b>"]
+direction LR
+UP["Up-Sweep<br>
+Binary Lifting<br>
+Hierarchical Context"]:::scan
+MID["Parallel Prefix States<br>
+log2(N) Stages"]:::scan
+DN["Down-Sweep<br>
+State Recovery<br>
+Full Reconstruction"]:::scan
+end
+
+%% ===================== REGULARIZATION =====================
+subgraph ST4["<b>REGULARIZATION</b>"]
+direction LR
+LS["LayerScale<br>γ ≈ 1e-5"]:::reg
+SD["Stochastic Depth<br>p_l = l / L"]:::reg
+end
+
+%% ===================== OUTPUT =====================
+subgraph ST5["<b>OUTPUT PROCESSING</b>"]
+direction LR
+NORM["LayerNorm + Linear<br>256 → D"]:::reg
+OUT["Final Representation<br>
+Long-Range Context<br>
+AUC ≈ 0.999"]:::out
+end
+
+%% ===================== RESIDUAL =====================
+RES["Residual Skip<br>Identity Mapping"]:::res
+
+%% ===================== FLOW =====================
+XT --> ST1
+ST1 --> ST2
+ST2 --> ST3
+ST3 --> ST4
+ST4 --> ST5
+
+%% residual connection
+XT -.-> RES
+RES -.-> NORM
